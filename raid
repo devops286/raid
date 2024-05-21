@@ -1,0 +1,101 @@
+[root@dny2d1o4p03 ~]# cat raidswap.sh
+#!/bin/bash
+case "$1" in
+  raid6)
+        systemctl stop xymon
+        systemctl stop rsyslog
+        systemctl stop SplunkForwarder.service
+        lsof | grep /apps && echo "Close all open files on /apps" && exit 1
+        echo "Starting removal of apps disk"
+        umount /apps || echo "unable to umount /apps"
+        mount | grep apps && exit 1
+        lvremove -f /dev/appvg/appsvol
+        vgchange -an appvg
+        vgremove -f appvg
+        pvremove -f /dev/sdb1
+        wipefs --all /dev/sdb
+        echo 1 > /sys/class/block/sdb/device/delete
+        /opt/MegaRAID/perccli/perccli64 /c0/v239 del force
+        /opt/MegaRAID/perccli/perccli64 /c0/e252/s7 delete hotsparedrive
+        #
+        echo "Recreating RAID6"
+        /opt/MegaRAID/perccli/perccli64 /c0 add vd type=raid6 drives=252:3-7
+        /usr/bin/scsi-rescan -a
+        wipefs --all /dev/sdb
+        /sbin/parted /dev/sdb 'mklabel gpt' -s
+        /sbin/parted /dev/sdb 'mkpart primary 0% 100%' -s
+        /usr/sbin/pvcreate /dev/sdb1
+        /usr/sbin/vgcreate appvg /dev/sdb1
+        /usr/sbin/lvcreate -l+100%FREE appvg -n appsvol -W y --yes
+        sleep 3
+        /usr/sbin/mkfs.xfs -f /dev/mapper/appvg-appsvol
+        /usr/bin/mount -a
+        /usr/bin/chown miaxots:tradedev /apps
+        /usr/bin/chmod 775 /apps
+        ln -s /opt/xymon /apps/xymon
+        mkdir /apps/core
+        /usr/bin/chown root:miaxlogs /apps/core
+        /usr/bin/chmod 775 /apps/core
+        mkdir /apps/logs
+        /usr/bin/chown root:miaxlogs /apps/logs
+        /usr/bin/chmod 775 /apps/logs
+        systemctl start xymon
+        systemctl start rsyslog
+        logger -p local6.warn "test"
+        logrotate -f /etc/logrotate.d/miax
+        chgrp emrldlogs /apps/logs/miax.log.1.gz
+        chmod g+w /apps/logs/miax.log.1.gz
+        /opt/MegaRAID/perccli/perccli64 /c0/v239 set pdcache=off
+        /opt/MegaRAID/perccli/perccli64 /c0/v239 set iopolicy=direct
+        /opt/MegaRAID/perccli/perccli64 /c0/v239 set rdcache=nora
+        /opt/MegaRAID/perccli/perccli64 /c0/v239 set wrcache=wt
+        ;;
+  raid10)
+        /usr/bin/systemctl stop xymon
+        /usr/bin/systemctl stop rsyslog
+        systemctl stop SplunkForwarder.service
+        /usr/sbin/lsof | grep /apps && echo "Close all open files on /apps" && exit 1
+        echo "Starting removal of apps disk"
+        /usr/bin/umount /apps || echo "unable to umount /apps"
+        mount | grep apps && exit 1
+        /usr/sbin/lvremove -f /dev/appvg_ssd/appsvol
+        /usr/sbin/vgchange -an appvg_ssd
+        /usr/sbin/vgremove -f appvg_ssd
+        /usr/sbin/pvremove -f /dev/sdb1
+        wipefs --all /dev/sdb &>/dev/null
+        echo 1 > /sys/class/block/sdb/device/delete
+        /opt/MegaRAID/perccli/perccli64 /c0/v1 del force
+        #
+        echo "Recreating RAID10"
+        /opt/MegaRAID/perccli/perccli64 /c0 add vd type=raid10 drives=32:2-7  pdperarray=2
+        /usr/bin/scsi-rescan -a &>/dev/null
+        wipefs --all /dev/sdb &>/dev/null
+        /sbin/parted /dev/sdb 'mklabel gpt' -s
+        /sbin/parted /dev/sdb 'mkpart primary 0% 100%' -s
+        /usr/sbin/pvcreate /dev/sdb1
+        /usr/sbin/vgcreate appvg_ssd /dev/sdb1
+        /usr/sbin/lvcreate -l+100%FREE appvg_ssd -n appsvol -W y --yes
+        /usr/sbin/mkfs.xfs -f /dev/mapper/appvg_ssd-appsvol &>/dev/null
+        /usr/bin/mount -a
+        /usr/bin/chown emrldots:emrldots /apps
+        /usr/bin/chmod 775 /apps
+        ln -s /opt/xymon /apps/xymon
+        mkdir /apps/core
+        /usr/bin/chown root:emrldlogs /apps/core
+        /usr/bin/chmod 775 /apps/core
+        mkdir /apps/logs
+        /usr/bin/chown emrldots:prodsupp /apps/logs
+        /usr/bin/chmod 755 /apps/logs
+        systemctl start xymon
+        systemctl start rsyslog
+        logger -p local6.warn "test"
+        logrotate -f /etc/logrotate.d/miax
+        chgrp emrldlogs /apps/logs/miax.log.1.gz
+        chmod g+w /apps/logs/miax.log.1.gz
+        ;;
+  *)
+        echo $"Usage: $0 {raid6|raid10}"
+        exit 2
+esac
+
+[root@dny2d1o4p03 ~]#
