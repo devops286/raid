@@ -1,3 +1,16 @@
+/opt/MegaRAID/perccli/perccli64 /c0 show all
+
+
+lsblk
+
+
+
+First taking backup of the partition 
+mkdir /home/apps_backup; rsync -avp --numeric-ids /apps/ /home/apps_backup/
+
+
+
+
 [root@dny2d1o4p03 ~]# cat raidswap.sh
 #!/bin/bash
 case "$1" in
